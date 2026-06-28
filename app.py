@@ -298,3 +298,72 @@ else:
             file_name='hasil_clustering.csv',
             mime='text/csv'
         )
+        
+st.markdown("---")
+
+    # ============================================================
+    # FITUR CEK KATEGORI PRODUK
+    # ============================================================
+    st.subheader("🔍 Cek Kategori & Cluster Produk")
+    st.caption("Ketik nama produk untuk mengetahui kategori dan cluster-nya")
+
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        input_produk = st.text_input(
+            "Nama Produk",
+            placeholder="Contoh: Fullsystem Knalpot Brio, Tailpipe Innova 2Kd, dll"
+        )
+    with col2:
+        cek_button = st.button("🔍 Cek Sekarang", use_container_width=True)
+
+    if cek_button and input_produk:
+        # Kategorisasi
+        kategori_hasil = kategorisasi(input_produk)
+
+        # Cari info cluster dari df_hasil
+        info = df_hasil[df_hasil['KATEGORI'] == kategori_hasil]
+
+        if len(info) > 0:
+            row = info.iloc[0]
+            label = row['Label']
+
+            # Warna dan emoji per label
+            config = {
+                'Terlaris'    : ('🟢', 'success'),
+                'Sedang'      : ('🟡', 'warning'),
+                'Kurang Laris': ('🔴', 'error')
+            }
+            emoji, tipe = config[label]
+
+            # Tampilkan hasil
+            st.markdown("---")
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.info(f"**Kategori**\n\n{kategori_hasil}")
+            with col2:
+                if tipe == 'success':
+                    st.success(f"**Cluster**\n\n{emoji} {label}")
+                elif tipe == 'warning':
+                    st.warning(f"**Cluster**\n\n{emoji} {label}")
+                else:
+                    st.error(f"**Cluster**\n\n{emoji} {label}")
+            with col3:
+                st.info(f"**Total Transaksi**\n\n{int(row['total_transaksi']):,} transaksi")
+            with col4:
+                st.info(f"**Total Pendapatan**\n\nRp {row['total_pendapatan']:,.0f}".replace(',', '.'))
+
+            # Disclaimer
+            st.caption(
+                f"⚠️ Catatan: Produk '{input_produk}' diidentifikasi sebagai kategori "
+                f"**{kategori_hasil}**. Data transaksi dan pendapatan yang ditampilkan "
+                f"mencakup **seluruh produk dalam kategori {kategori_hasil}**, "
+                f"bukan hanya produk yang Anda cari."
+            )
+        else:
+            st.warning(
+                f"Produk masuk kategori **{kategori_hasil}** "
+                f"namun kategori ini tidak ditemukan dalam data yang diupload."
+            )
+
+    elif cek_button and not input_produk:
+        st.warning("Silakan ketik nama produk terlebih dahulu!")
