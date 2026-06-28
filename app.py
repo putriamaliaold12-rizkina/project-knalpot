@@ -123,25 +123,23 @@ def kategorisasi(nama):
 # FUNGSI PREDIKSI CLUSTER
 # ============================================================
 def prediksi_cluster(df):
-    # Kategorisasi
+    df = df.copy()
     df['KATEGORI'] = df['NAMA BARANG'].apply(kategorisasi)
 
-    # Agregasi
     df_agg = df.groupby('KATEGORI').agg(
         total_transaksi=('HARGA', 'count'),
         total_pendapatan=('HARGA', 'sum')
     ).reset_index()
 
-    # Scaling
     X = df_agg[['total_transaksi', 'total_pendapatan']]
     X_scaled = scaler.transform(X)
 
-    # Prediksi
     df_agg['Cluster'] = kmeans.predict(X_scaled)
 
-    # Label
     cluster_map = {1: 'Terlaris', 0: 'Sedang', 2: 'Kurang Laris'}
     df_agg['Label'] = df_agg['Cluster'].map(cluster_map)
+    if df_agg['Label'].isna().any():
+        df_agg['Label'] = df_agg['Label'].fillna('Kurang Laris')
 
     return df_agg
 
@@ -150,7 +148,6 @@ def prediksi_cluster(df):
 # ============================================================
 st.title("🏍️ Segmentasi Produk Berkah Performance")
 st.caption("K-Means Clustering — CRISP-DM | Putri Amelia | 2025")
-
 st.markdown("---")
 
 # Sidebar
@@ -166,10 +163,16 @@ with st.sidebar:
     st.markdown("- `NAMA BARANG`")
     st.markdown("- `HARGA`")
     st.markdown("- `BULAN` (opsional)")
+    st.markdown("---")
+    st.markdown("**Info Model:**")
+    st.markdown("- Algoritma : K-Means (K=3)")
+    st.markdown("- Dilatih   : Data 2025")
+    st.markdown("- Kategori  : 16 kategori produk")
 
-# Main content
+# ============================================================
+# HALAMAN UTAMA
+# ============================================================
 if uploaded_file is None:
-    # Halaman awal
     col1, col2, col3 = st.columns(3)
     with col1:
         st.info("📤 **Step 1**\nUpload file Excel di sidebar kiri")
@@ -181,37 +184,53 @@ if uploaded_file is None:
     st.markdown("---")
     st.subheader("ℹ️ Tentang Aplikasi")
     st.write(
-        "Aplikasi ini menggunakan algoritma K-Means Clustering untuk mengelompokkan "
-        "produk penjualan Toko Berkah Performance ke dalam 3 cluster: "
-        "**Terlaris**, **Sedang**, dan **Kurang Laris**."
+        "Aplikasi ini menggunakan algoritma **K-Means Clustering** untuk "
+        "mengelompokkan produk penjualan Toko Berkah Performance ke dalam "
+        "3 cluster: **Terlaris**, **Sedang**, dan **Kurang Laris**."
     )
+    st.markdown("---")
+    st.subheader("📦 16 Kategori Produk")
+    kategori_list = [
+        "1. Fullsystem", "2. Tailpipe + Centerpipe",
+        "3. Centerpipe + Resonator", "4. Downpipe + Frontpipe",
+        "5. Downpipe Satuan", "6. Frontpipe Satuan",
+        "7. Tailpipe Satuan", "8. Side Exit",
+        "9. Bolt On", "10. Header",
+        "11. Resonator Satuan", "12. Muffler Satuan",
+        "13. Pipa Bolt On", "14. Tabung Knalpot",
+        "15. Db Killer", "16. Lainnya"
+    ]
+    col1, col2 = st.columns(2)
+    for i, k in enumerate(kategori_list):
+        if i < 8:
+            col1.markdown(f"- {k}")
+        else:
+            col2.markdown(f"- {k}")
 
 else:
     # Proses data
-    with st.spinner("Memproses data..."):
+    with st.spinner("⚙️ Memproses data..."):
         df = pd.read_excel(uploaded_file)
 
-        # Validasi kolom
         if 'NAMA BARANG' not in df.columns or 'HARGA' not in df.columns:
             st.error("❌ File harus memiliki kolom NAMA BARANG dan HARGA!")
             st.stop()
 
         df_hasil = prediksi_cluster(df)
 
-    st.success(f"✅ Data berhasil diproses! {len(df)} transaksi, {len(df_hasil)} kategori produk.")
+    st.success(f"✅ Data berhasil diproses! {len(df):,} transaksi, {len(df_hasil)} kategori produk.")
     st.markdown("---")
 
-    # Filter bulan jika ada
+    # Filter bulan
     if 'BULAN' in df.columns:
         bulan_list = ['Semua Bulan'] + sorted(df['BULAN'].unique().tolist())
-        bulan_pilih = st.selectbox("Filter Bulan", bulan_list)
-
+        bulan_pilih = st.selectbox("🗓️ Filter Bulan", bulan_list)
         if bulan_pilih != 'Semua Bulan':
             df_filter = df[df['BULAN'] == bulan_pilih]
             df_hasil = prediksi_cluster(df_filter)
             st.info(f"Menampilkan data bulan: **{bulan_pilih}**")
 
-    # Metrik ringkasan
+    # Metrik
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Total Transaksi", f"{len(df):,}")
@@ -230,26 +249,36 @@ else:
 
     with tab1:
         for label, color, emoji in [
-            ('Terlaris', '#2ECC71', '🟢'),
-            ('Sedang', '#F39C12', '🟡'),
+            ('Terlaris',     '#2ECC71', '🟢'),
+            ('Sedang',       '#F39C12', '🟡'),
             ('Kurang Laris', '#E74C3C', '🔴')
         ]:
             subset = df_hasil[df_hasil['Label'] == label].sort_values(
                 'total_transaksi', ascending=False
             )
             st.subheader(f"{emoji} {label} ({len(subset)} kategori)")
-            subset_display = subset[['KATEGORI', 'total_transaksi', 'total_pendapatan']].copy()
-            subset_display.columns = ['Kategori Produk', 'Total Transaksi', 'Total Pendapatan (Rp)']
-            subset_display['Total Pendapatan (Rp)'] = subset_display['Total Pendapatan (Rp)'].apply(
-                lambda x: f"Rp {x:,.0f}".replace(',', '.')
-            )
-            st.dataframe(subset_display, use_container_width=True, hide_index=True)
+            if len(subset) > 0:
+                subset_display = subset[['KATEGORI', 'total_transaksi', 'total_pendapatan']].copy()
+                subset_display.columns = ['Kategori Produk', 'Total Transaksi', 'Total Pendapatan (Rp)']
+                subset_display['Total Pendapatan (Rp)'] = subset_display['Total Pendapatan (Rp)'].apply(
+                    lambda x: f"Rp {x:,.0f}".replace(',', '.')
+                )
+                st.dataframe(subset_display, use_container_width=True, hide_index=True)
+            else:
+                st.info("Tidak ada kategori dalam cluster ini.")
 
     with tab2:
-        warna = {'Terlaris': '#2ECC71', 'Sedang': '#F39C12', 'Kurang Laris': '#E74C3C'}
+        warna = {
+            'Terlaris'    : '#2ECC71',
+            'Sedang'      : '#F39C12',
+            'Kurang Laris': '#E74C3C'
+        }
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
-        fig.suptitle('Hasil K-Means Clustering — Segmentasi Produk', fontsize=13, fontweight='bold')
+        fig.suptitle(
+            'Hasil K-Means Clustering — Segmentasi Produk\nBerkah Performance',
+            fontsize=13, fontweight='bold'
+        )
 
         for label, color in warna.items():
             subset = df_hasil[df_hasil['Label'] == label]
@@ -261,31 +290,37 @@ else:
                     edgecolors='white', linewidth=1.5
                 )
 
-        # Annotasi plot kiri
         for _, row in df_hasil.iterrows():
-            ax1.annotate(row['KATEGORI'],
-                        (row['total_transaksi'], row['total_pendapatan'] / 1_000_000),
-                        textcoords="offset points", xytext=(5, 4), fontsize=7)
+            ax1.annotate(
+                row['KATEGORI'],
+                (row['total_transaksi'], row['total_pendapatan'] / 1_000_000),
+                textcoords="offset points", xytext=(5, 4), fontsize=7
+            )
 
-        # Zoom plot kanan
         df_zoom = df_hasil[df_hasil['KATEGORI'] != 'Fullsystem']
         for _, row in df_zoom.iterrows():
-            ax2.annotate(row['KATEGORI'],
-                        (row['total_transaksi'], row['total_pendapatan'] / 1_000_000),
-                        textcoords="offset points", xytext=(5, 4), fontsize=7.5)
+            ax2.annotate(
+                row['KATEGORI'],
+                (row['total_transaksi'], row['total_pendapatan'] / 1_000_000),
+                textcoords="offset points", xytext=(5, 4), fontsize=7.5
+            )
 
         for ax in [ax1, ax2]:
             ax.set_xlabel('Total Transaksi', fontsize=10)
             ax.set_ylabel('Total Pendapatan (Juta Rp)', fontsize=10)
             ax.grid(True, alpha=0.3, linestyle='--')
-            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'Rp {x:.0f}jt'))
+            ax.yaxis.set_major_formatter(
+                plt.FuncFormatter(lambda x, _: f'Rp {x:.0f}jt')
+            )
 
         ax1.set_title('Keseluruhan Data', fontsize=11, fontweight='bold')
         ax2.set_title('Zoom — Sedang & Kurang Laris', fontsize=11, fontweight='bold')
 
         legend_patches = [mpatches.Patch(color=c, label=l) for l, c in warna.items()]
-        fig.legend(handles=legend_patches, loc='lower center', ncol=3,
-                  fontsize=10, bbox_to_anchor=(0.5, -0.05))
+        fig.legend(
+            handles=legend_patches, loc='lower center',
+            ncol=3, fontsize=10, bbox_to_anchor=(0.5, -0.05)
+        )
 
         plt.tight_layout()
         st.pyplot(fig)
@@ -293,19 +328,17 @@ else:
     with tab3:
         st.dataframe(df_hasil, use_container_width=True, hide_index=True)
         st.download_button(
-            label="⬇️ Download Hasil (.xlsx)",
+            label="⬇️ Download Hasil (.csv)",
             data=df_hasil.to_csv(index=False).encode('utf-8'),
             file_name='hasil_clustering.csv',
             mime='text/csv'
         )
-        
-st.markdown("---")
 
-    # ============================================================
-    # FITUR CEK KATEGORI PRODUK
-    # ============================================================
+    st.markdown("---")
+
+    # CEK KATEGORI PRODUK
     st.subheader("🔍 Cek Kategori & Cluster Produk")
-    st.caption("Ketik nama produk untuk mengetahui kategori dan cluster-nya")
+    st.caption("Ketik nama produk untuk mengetahui kategori dan cluster-nya berdasarkan data yang diupload")
 
     col1, col2 = st.columns([3, 1])
     with col1:
@@ -317,25 +350,19 @@ st.markdown("---")
         cek_button = st.button("🔍 Cek Sekarang", use_container_width=True)
 
     if cek_button and input_produk:
-        # Kategorisasi
         kategori_hasil = kategorisasi(input_produk)
-
-        # Cari info cluster dari df_hasil
         info = df_hasil[df_hasil['KATEGORI'] == kategori_hasil]
 
         if len(info) > 0:
             row = info.iloc[0]
             label = row['Label']
-
-            # Warna dan emoji per label
             config = {
                 'Terlaris'    : ('🟢', 'success'),
                 'Sedang'      : ('🟡', 'warning'),
                 'Kurang Laris': ('🔴', 'error')
             }
-            emoji, tipe = config[label]
+            emoji, tipe = config.get(label, ('⚪', 'info'))
 
-            # Tampilkan hasil
             st.markdown("---")
             col1, col2, col3, col4 = st.columns(4)
             with col1:
@@ -350,20 +377,20 @@ st.markdown("---")
             with col3:
                 st.info(f"**Total Transaksi**\n\n{int(row['total_transaksi']):,} transaksi")
             with col4:
-                st.info(f"**Total Pendapatan**\n\nRp {row['total_pendapatan']:,.0f}".replace(',', '.'))
+                pendapatan_fmt = f"Rp {int(row['total_pendapatan']):,}".replace(',', '.')
+                st.info(f"**Total Pendapatan**\n\n{pendapatan_fmt}")
 
-            # Disclaimer
             st.caption(
-                f"⚠️ Catatan: Produk '{input_produk}' diidentifikasi sebagai kategori "
+                f"⚠️ Catatan: Produk **'{input_produk}'** diidentifikasi masuk kategori "
                 f"**{kategori_hasil}**. Data transaksi dan pendapatan yang ditampilkan "
                 f"mencakup **seluruh produk dalam kategori {kategori_hasil}**, "
                 f"bukan hanya produk yang Anda cari."
             )
         else:
             st.warning(
-                f"Produk masuk kategori **{kategori_hasil}** "
-                f"namun kategori ini tidak ditemukan dalam data yang diupload."
+                f"Produk masuk kategori **{kategori_hasil}** namun "
+                f"kategori ini tidak ditemukan dalam data yang diupload."
             )
 
     elif cek_button and not input_produk:
-        st.warning("Silakan ketik nama produk terlebih dahulu!")
+        st.warning("⚠️ Silakan ketik nama produk terlebih dahulu!")
